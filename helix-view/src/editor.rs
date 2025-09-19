@@ -441,6 +441,9 @@ pub struct Config {
     pub insecure: bool,
     /// Workspace-trust configuration.
     pub workspace_trust: WorkspaceTrustConfig,
+    /// Command line configuration
+    #[serde(default)]
+    pub cmdline: CmdlineConfig,
 }
 
 /// User-facing configuration for `[editor.workspace-trust]`.
@@ -545,6 +548,7 @@ impl PickerStartPosition {
         matches!(self, Self::Current)
     }
 }
+}
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "kebab-case")]
@@ -553,6 +557,72 @@ pub enum KittyKeyboardProtocolConfig {
     Auto,
     Disabled,
     Enabled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+pub struct CmdlineConfig {
+    /// Command line display style. Options: "bottom", "popup". Defaults to "bottom".
+    pub style: CmdlineStyle,
+    /// Enable command icons in cmdline. Defaults to true.
+    pub show_icons: bool,
+    /// Minimum width for popup cmdline. Defaults to 40.
+    pub min_popup_width: u16,
+    /// Maximum width for popup cmdline. Defaults to 80.
+    pub max_popup_width: u16,
+    /// Customizable icons for different command types.
+    pub icons: CmdlineIcons,
+}
+
+impl Default for CmdlineConfig {
+    fn default() -> Self {
+        Self {
+            style: CmdlineStyle::Bottom,
+            show_icons: true,
+            min_popup_width: 40,
+            max_popup_width: 80,
+            icons: CmdlineIcons::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+pub struct CmdlineIcons {
+    /// Icon for search commands (/,?). Defaults to "🔍".
+    pub search: String,
+    /// Icon for command mode (:). Defaults to "⚙".
+    pub command: String,
+    /// Icon for shell commands (!). Defaults to "⚡".
+    pub shell: String,
+    /// Icon for general prompts. Defaults to "💬".
+    pub general: String,
+}
+
+impl Default for CmdlineIcons {
+    fn default() -> Self {
+        Self {
+            search: "🔍".to_string(),
+            command: "⚙".to_string(),
+            shell: "⚡".to_string(),
+            general: "💬".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CmdlineStyle {
+    /// Traditional bottom command line
+    Bottom,
+    /// Centered popup window (noice.nvim style)
+    Popup,
+}
+
+impl Default for CmdlineStyle {
+    fn default() -> Self {
+        Self::Bottom
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Eq, PartialOrd, Ord)]
@@ -1260,6 +1330,7 @@ impl Default for Config {
             enable_steel: false,
             insecure: false,
             workspace_trust: WorkspaceTrustConfig::default(),
+            cmdline: CmdlineConfig::default(),
         }
     }
 }
