@@ -8,6 +8,7 @@ use crate::{
     ui::{
         self,
         document::{render_document, LinePos, TextRenderer},
+        gradient_border::GradientBorder,
         picker::query::PickerQuery,
         text_decorations::DecorationManager,
         EditorView,
@@ -269,6 +270,9 @@ pub struct Picker<T: 'static + Send + Sync, D: 'static> {
     /// An event handler for syntax highlighting the currently previewed file.
     preview_highlight_handler: Sender<Arc<Path>>,
     dynamic_query_handler: Option<Sender<DynamicQueryChange>>,
+    title: Option<Spans<'static>>,
+    /// Gradient border renderer
+    gradient_border: Option<GradientBorder>,
 }
 
 impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
@@ -394,6 +398,8 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
             file_fn: None,
             preview_highlight_handler: PreviewHighlightHandler::<T, D>::default().spawn(),
             dynamic_query_handler: None,
+            title: None,
+            gradient_border: None, // Will be initialized in render method
         }
     }
 
@@ -698,12 +704,43 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         let background = cx.editor.theme.get("ui.background");
         surface.clear_with(area, background);
 
-        const BLOCK: Block<'_> = Block::bordered();
+        let config = &cx.editor.config().gradient_borders;
 
-        // calculate the inner area inside the box
-        let inner = BLOCK.inner(area);
+        // Use gradient border if enabled, otherwise use default border
+        let inner = if config.enable {
+            // Initialize gradient border if needed
+            if self.gradient_border.is_none() {
+                self.gradient_border = Some(GradientBorder::from_theme(&cx.editor.theme, config));
+            }
 
-        BLOCK.render(area, surface);
+            // Render gradient border with title support
+            if let Some(ref mut gradient_border) = self.gradient_border {
+                let title_text = self.title.as_ref().map(|spans| {
+                    spans.0.iter().map(|span| span.content.as_ref()).collect::<String>()
+                });
+                let rounded = cx.editor.config().rounded_corners;
+                gradient_border.render_with_title(area, surface, &cx.editor.theme, title_text.as_deref(), rounded);
+            }
+
+            // Calculate inner area manually (same as Block::inner)
+            Rect {
+                x: area.x + 1,
+                y: area.y + 1,
+                width: area.width.saturating_sub(2),
+                height: area.height.saturating_sub(2),
+            }
+        } else {
+            // Use traditional border
+            let border_type = BorderType::new(cx.editor.config().rounded_corners);
+            let block: Block<'_> = self.title.as_ref().map_or(
+                Block::bordered().border_type(border_type),
+                |title| Block::bordered().border_type(border_type).title(title.clone())
+            );
+
+            let inner = block.inner(area);
+            block.render(area, surface);
+            inner
+        };
 
         // -- Render the input bar:
 
@@ -887,14 +924,38 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         let directory = cx.editor.theme.get("ui.text.directory");
         surface.clear_with(area, background);
 
-        const BLOCK: Block<'_> = Block::bordered();
+        let config = &cx.editor.config().gradient_borders;
 
-        // calculate the inner area inside the box
-        let inner = BLOCK.inner(area);
-        // 1 column gap on either side
-        let margin = Margin::horizontal(1);
-        let inner = inner.inner(margin);
-        BLOCK.render(area, surface);
+        // Use gradient border for preview if enabled, otherwise use default border
+        let inner = if config.enable {
+            // For preview, we can reuse the same gradient border instance if it exists
+            if let Some(ref mut gradient_border) = self.gradient_border {
+                let rounded = cx.editor.config().rounded_corners;
+                gradient_border.render(area, surface, &cx.editor.theme, rounded);
+            }
+
+            // Calculate inner area manually (same as Block::inner)
+            let block_inner = Rect {
+                x: area.x + 1,
+                y: area.y + 1,
+                width: area.width.saturating_sub(2),
+                height: area.height.saturating_sub(2),
+            };
+            // 1 column gap on either side
+            let margin = Margin::horizontal(1);
+            block_inner.inner(margin)
+        } else {
+            // Use traditional border
+            let border_type = BorderType::new(cx.editor.config().rounded_corners);
+            let block: Block<'_> = Block::bordered().border_type(border_type);
+
+            let inner = block.inner(area);
+            // 1 column gap on either side
+            let margin = Margin::horizontal(1);
+            let inner = inner.inner(margin);
+            block.render(area, surface);
+            inner
+        };
 
         if let Some((preview, range)) = self.get_preview(cx.editor) {
             let doc = match preview.document() {

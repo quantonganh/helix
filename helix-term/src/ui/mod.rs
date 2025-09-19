@@ -3,6 +3,7 @@ pub mod cmdline_popup;
 mod document;
 pub(crate) mod editor;
 mod extension;
+pub mod gradient_border;
 mod info;
 pub mod lsp;
 mod markdown;
