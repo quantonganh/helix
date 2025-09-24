@@ -65,7 +65,7 @@ pub fn prompt(
 
     match cmdline_style {
         CmdlineStyle::Popup => {
-            let mut cmdline = CmdlinePopup::new(
+            let cmdline = CmdlinePopup::new(
                 prompt,
                 history_register,
                 completion_fn,
@@ -145,7 +145,7 @@ pub fn raw_regex_prompt(
 
     match cmdline_style {
         CmdlineStyle::Popup => {
-            let mut cmdline = CmdlinePopup::new(
+            let cmdline = CmdlinePopup::new(
                 prompt,
                 history_register,
                 completion_fn,

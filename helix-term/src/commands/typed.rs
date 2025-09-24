@@ -4228,7 +4228,7 @@ pub(super) fn command_mode(cx: &mut Context) {
     match cmdline_style {
         CmdlineStyle::Popup => {
             let mut cmdline = ui::CmdlinePopup::new(
-                ":".into(),
+                "Cmdline".into(),
                 Some(':'),
                 complete_command_line,
                 move |cx: &mut compositor::Context, input: &str, event: PromptEvent| {
@@ -4247,7 +4247,7 @@ pub(super) fn command_mode(cx: &mut Context) {
         CmdlineStyle::Bottom => {
             // Use traditional prompt
             let mut prompt = Prompt::new(
-                ":".into(),
+                "Cmdline".into(),
                 Some(':'),
                 complete_command_line,
                 move |cx: &mut compositor::Context, input: &str, event: PromptEvent| {
