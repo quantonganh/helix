@@ -37,6 +37,7 @@ pub use spinner::{ProgressSpinners, Spinner};
 pub use text::Text;
 
 use helix_view::Editor;
+use helix_view::editor::CmdlineStyle;
 use tui::text::{Span, Spans};
 
 use std::path::Path;
@@ -141,11 +142,9 @@ pub fn raw_regex_prompt(
     let offset_snapshot = doc.view_offset(view.id);
     let config = cx.editor.config();
 
-    let cmdline_style = cx.editor.config().cmdline.style;
-
-    match cmdline_style {
+    match config.cmdline.style {
         CmdlineStyle::Popup => {
-            let cmdline = CmdlinePopup::new(
+            let mut cmdline = CmdlinePopup::new(
                 prompt,
                 history_register,
                 completion_fn,
@@ -157,7 +156,6 @@ pub fn raw_regex_prompt(
                             doc.set_view_offset(view.id, offset_snapshot);
                         }
                         PromptEvent::Update | PromptEvent::Validate => {
-                            // skip empty input
                             if input.is_empty() {
                                 return;
                             }
@@ -178,12 +176,9 @@ pub fn raw_regex_prompt(
                             {
                                 Ok(regex) => {
                                     let (view, doc) = current!(cx.editor);
-
-                                    // revert state to what it was before the last update
                                     doc.set_selection(view.id, snapshot.clone());
 
                                     if event == PromptEvent::Validate {
-                                        // Equivalent to push_jump to store selection just before jump
                                         view.jumps.push((doc_id, snapshot.clone()));
                                     }
 
@@ -205,7 +200,7 @@ pub fn raw_regex_prompt(
                                                     let size = compositor.size();
                                                     let popup = Popup::new("invalid-regex", contents)
                                                         .position(Some(helix_core::Position::new(
-                                                            size.height as usize - 2, // 2 = statusline + commandline
+                                                            size.height as usize - 2,
                                                             0,
                                                         )))
                                                         .auto_close(true);
@@ -241,7 +236,6 @@ pub fn raw_regex_prompt(
                             doc.set_view_offset(view.id, offset_snapshot);
                         }
                         PromptEvent::Update | PromptEvent::Validate => {
-                            // skip empty input
                             if input.is_empty() {
                                 return;
                             }
@@ -312,7 +306,6 @@ pub fn raw_regex_prompt(
             prompt.recalculate_completion(cx.editor);
             // prompt
             cx.push_layer(Box::new(prompt));
-        }
     }
 }
 
