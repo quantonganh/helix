@@ -183,26 +183,29 @@ impl CmdlinePopup {
         }
     }
 
-    /// Render the input text with syntax highlighting
-    fn render_input_text(&self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+    /// Render the input text with horizontal scrolling support
+    fn render_input_text(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
         let theme = &cx.editor.theme;
         let text_style = theme.get("ui.text");
+        let line_width = area.width as usize;
 
-        if let Some((language, loader)) = self.prompt.language().as_ref() {
-            // Use syntax highlighting for known languages
-            let mut text: ui::text::Text = crate::ui::markdown::highlighted_code_block(
-                self.prompt.line(),
-                language,
-                Some(&cx.editor.theme),
-                &loader.load(),
-                None,
-            )
-            .into();
-            text.render(area, surface, cx);
-        } else {
-            // Fallback to plain text
-            surface.set_string(area.x, area.y, self.prompt.line(), text_style);
-        }
+        // Update scroll anchor based on cursor position and available width
+        self.prompt.update_scroll_anchor(line_width);
+
+        let anchor = self.prompt.anchor();
+        let line = self.prompt.line();
+        let visible_text = &line[anchor..];
+
+        // Use set_string_anchored to handle truncation indicators
+        surface.set_string_anchored(
+            area.x,
+            area.y,
+            self.prompt.truncate_start(),
+            self.prompt.truncate_end(),
+            visible_text,
+            line_width,
+            |_| text_style,
+        );
     }
 
     /// Render completion popup
@@ -367,12 +370,26 @@ impl Component for CmdlinePopup {
                     .borders(tui::widgets::Borders::ALL)
                     .inner(self.popup_area);
 
-                // For now, just put cursor at end of input
-                // TODO: Fix cursor positioning to match actual cursor in prompt
-                let cursor_pos = self.prompt.line().width();
-
-                let cursor_x = inner_area.x as usize + prefix_width + cursor_pos;
-                let cursor_y = inner_area.y as usize;
+                // Compute cursor position accounting for horizontal scroll anchor
+                let byte_pos = self.prompt.position();
+                let anchor = self.prompt.anchor();
+                let line = self.prompt.line();
+                
+                // Calculate cursor position relative to the visible portion (after anchor)
+                // Also account for truncation indicator if text is scrolled
+                let truncate_start = self.prompt.truncate_start();
+                let visible_cursor_offset = if byte_pos >= anchor {
+                    line[anchor..byte_pos].width()
+                } else {
+                    0
+                };
+                
+                // Add 1 for the truncation indicator "…" if we're scrolled
+                let indicator_offset = if truncate_start { 1 } else { 0 };
+                let cursor_offset = (visible_cursor_offset + indicator_offset) as u16;
+                let clamped_offset = cursor_offset.min(input_area.width.saturating_sub(1));
+                let cursor_x = input_area.x as usize + clamped_offset as usize;
+                let cursor_y = input_area.y as usize;
 
                 (
                     Some(Position::new(cursor_y, cursor_x)),
