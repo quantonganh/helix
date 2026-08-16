@@ -1,4 +1,5 @@
 use anyhow::{Context, Error, Result};
+use futures_util::{stream, StreamExt};
 use helix_loader::VERSION_AND_GIT_HASH;
 use helix_term::application::Application;
 use helix_term::args::Args;
@@ -62,6 +63,7 @@ FLAGS:
     --vsplit                       Split all given files vertically into different windows
     --hsplit                       Split all given files horizontally into different windows
     -w, --working-dir <path>       Specify an initial working directory
+    -e, --execute <command>        Executes the given command on startup
     +[N]                           Open the first given file at line number N, or the last line, if
                                    N is not specified.
 ",
@@ -149,11 +151,28 @@ FLAGS:
             helix_core::config::default_lang_loader()
         });
 
+    let execute_at_start = std::mem::take(&mut args.execute);
+    
     // TODO: use the thread local executor to spawn the application task separately from the work pool
     let mut app = Application::new(args, config, lang_loader, workspace_trust)
         .context("unable to start Helix")?;
-    let mut events = app.event_stream();
+    let events = app.event_stream();
 
+    #[cfg(windows)]
+    let execute_at_start = stream::iter(execute_at_start.into_iter().map(|item| {
+        Ok(crossterm::event::Event::Key(
+            crossterm::event::KeyEvent::from(item),
+        ))
+    }));
+    #[cfg(not(windows))]
+    let execute_at_start = stream::iter(
+        execute_at_start
+            .into_iter()
+            .map(|item| Ok(termina::Event::Key(termina::event::KeyEvent::from(item)))),
+    );
+
+    let mut events = execute_at_start.chain(events);
+    
     let exit_code = app.run(&mut events).await?;
 
     Ok(exit_code)

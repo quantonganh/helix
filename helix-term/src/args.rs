@@ -20,6 +20,7 @@ pub struct Args {
     pub config_file: Option<PathBuf>,
     pub files: IndexMap<PathBuf, Vec<Position>>,
     pub working_directory: Option<PathBuf>,
+    pub execute: Vec<helix_view::input::KeyEvent>,
 }
 
 impl Args {
@@ -76,6 +77,10 @@ impl Args {
                 "--log" => match argv.next().as_deref() {
                     Some(path) => args.log_file = Some(path.into()),
                     None => anyhow::bail!("--log must specify a path to write"),
+                },
+                "-e" | "--execute" => match argv.next().as_deref() {
+                    Some(command) => args.execute = helix_view::input::parse_macro(command)?,
+                    None => anyhow::bail!("--execute receives a command to execute"),
                 },
                 "-w" | "--working-dir" => match argv.next().as_deref() {
                     Some(path) => {
