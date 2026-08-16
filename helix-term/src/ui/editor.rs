@@ -696,10 +696,15 @@ impl EditorView {
             .try_get("ui.bufferline")
             .unwrap_or_else(|| editor.theme.get("ui.statusline.inactive"));
 
+        let bufferline_separator = editor
+            .theme
+            .try_get("ui.bufferline.separator")
+            .unwrap_or(bufferline_inactive);
+            
         let mut x = viewport.x;
         let current_doc = view!(editor).doc;
 
-        for doc in editor.documents() {
+        for (idx, doc) in editor.documents().enumerate() {
             let fname = Self::make_document_name(doc, editor);
 
             let style = if current_doc == doc.id() {
@@ -707,6 +712,14 @@ impl EditorView {
             } else {
                 bufferline_inactive
             };
+
+            if idx > 0 {
+                let used_width = viewport.x.saturating_sub(x);
+                let rem_width = surface.area.width.saturating_sub(used_width);
+                x = surface
+                    .set_stringn(x, viewport.y, "|", rem_width as usize, bufferline_separator)
+                    .0;
+            }
 
             let text = format!(" {}{} ", fname, if doc.is_modified() { "[+]" } else { "" });
             let used_width = viewport.x.saturating_sub(x);
