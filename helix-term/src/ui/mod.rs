@@ -37,7 +37,6 @@ pub use spinner::{ProgressSpinners, Spinner};
 pub use text::Text;
 
 use helix_view::Editor;
-use helix_view::editor::CmdlineStyle;
 use tui::text::{Span, Spans};
 
 use std::path::Path;
@@ -179,7 +178,9 @@ pub fn raw_regex_prompt(
                                     doc.set_selection(view.id, snapshot.clone());
 
                                     if event == PromptEvent::Validate {
-                                        view.jumps.push((doc_id, snapshot.clone()));
+                                        let doc = doc_mut!(cx.editor, &doc_id);
+                                        let view = view_mut!(cx.editor, view_id);
+                                        view.push_jump(doc, (doc_id, snapshot.clone()));
                                     }
 
                                     fun(cx, regex, input, event);
@@ -261,8 +262,9 @@ pub fn raw_regex_prompt(
                                     doc.set_selection(view.id, snapshot.clone());
 
                                     if event == PromptEvent::Validate {
-                                        // Equivalent to push_jump to store selection just before jump
-                                        view.jumps.push((doc_id, snapshot.clone()));
+                                        let doc = doc_mut!(cx.editor, &doc_id);
+                                        let view = view_mut!(cx.editor, view_id);
+                                        view.push_jump(doc, (doc_id, snapshot.clone()));
                                     }
 
                                     fun(cx, regex, input, event);
@@ -306,6 +308,7 @@ pub fn raw_regex_prompt(
             prompt.recalculate_completion(cx.editor);
             // prompt
             cx.push_layer(Box::new(prompt));
+        }
     }
 }
 

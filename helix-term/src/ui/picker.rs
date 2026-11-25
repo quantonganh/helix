@@ -12,7 +12,6 @@ use crate::{
         picker::query::PickerQuery,
         text_decorations::DecorationManager,
         EditorView,
-        gradient_border::GradientBorder,
     },
 };
 use futures_util::future::BoxFuture;
@@ -1236,7 +1235,7 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
         let render_preview =
             self.show_preview && self.file_fn.is_some() && area.width > MIN_AREA_WIDTH_FOR_PREVIEW;
 
-        let picker_width = if render_preview && !stack_vertically {
+        let picker_width = if render_preview {
             inner.width / 2
         } else {
             inner.width

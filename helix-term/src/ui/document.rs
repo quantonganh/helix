@@ -169,8 +169,15 @@ pub fn render_text(
         last_line_end = grapheme.visual_pos.col + grapheme_width;
     }
 
-    renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line);
-    decorations.render_virtual_lines(renderer, last_line_pos, last_line_end)
+    // `last_line_pos` is initialized with `doc_line: usize::MAX` and is only
+    // updated once a grapheme is actually rendered. When the viewport has
+    // zero height (for example while a bottom pane clips the editor during a
+    // resize), the loop can exit before that happens; rendering virtual lines
+    // for the sentinel position would overflow its `u16` visual line.
+    if last_line_pos.doc_line != usize::MAX {
+        renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line);
+        decorations.render_virtual_lines(renderer, last_line_pos, last_line_end)
+    }
 }
 
 #[derive(Debug)]

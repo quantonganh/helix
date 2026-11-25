@@ -3206,6 +3206,7 @@ fn run_initialization_script(
     // This might be fussed with, and under re initialization we want
     // to reset this back to what it was before.
     cx.editor.editor_clipping = ClippingConfiguration::default();
+    cx.editor.dock_clipping = ClippingConfiguration::default();
 
     log::info!("Loading init.scm...");
 
@@ -3332,6 +3333,14 @@ impl Component for BoxDynComponent {
 
     fn required_size(&mut self, _viewport: (u16, u16)) -> Option<(u16, u16)> {
         self.inner.required_size(_viewport)
+    }
+
+    fn placement(&self) -> compositor::LayerPlacement {
+        self.inner.placement()
+    }
+
+    fn set_area(&mut self, area: helix_view::graphics::Rect) {
+        self.inner.set_area(area)
     }
 
     fn type_name(&self) -> &'static str {
@@ -3665,6 +3674,7 @@ fn configure_lsp_globals() {
         "find-workspace",
         "doc-id->usize",
         "new-component!",
+        "dock",
         "acquire-context-lock",
         "SteelDynamicComponent?",
         "prompt",

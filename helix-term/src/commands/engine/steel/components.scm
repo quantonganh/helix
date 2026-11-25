@@ -240,7 +240,32 @@
 ;;
 ;;        Seldom used: TODO
 ;;
+;;    "placement": (-> state?) -> any?
+;;
+;;        Return `(dock side size #:order order)` to reserve a screen edge and
+;;        receive a clipped `Rect?` on render. Omit it for an overlay component.
+;;
+;;    "set_area": (-> state? Rect?) -> void?
+;;
+;;        Called with the component's assigned area before rendering.
+;;
 (define new-component! helix.components.new-component!)
+
+(provide dock)
+;;@doc
+;;
+;;Declare a docked component placement for use in the `new-component!`
+;;function map's `"placement"` hook.
+;;
+;;```scheme
+;;(dock 'bottom 12 #:order 0)
+;;```
+;;
+;;side : symbol? - 'left, 'right, 'top, or 'bottom
+;;size : int? - number of rows or columns the dock reserves
+;;order : int? - lower values are placed closer to the screen edge
+;;
+(define (dock side size #:order [order 0]) (helix.components.dock side size order))
 
 (provide position)
 ;;@doc

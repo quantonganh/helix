@@ -16,8 +16,33 @@ pub enum EventResult {
     ConsumedWithoutRerender,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockSide {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerPlacement {
+    Overlay,
+    Dock {
+        side: DockSide,
+        size: u16,
+        order: u16,
+    },
+}
+
+impl Default for LayerPlacement {
+    fn default() -> Self {
+        Self::Overlay
+    }
+}
+
 use crate::job::Jobs;
 use crate::ui::picker;
+use helix_view::editor::ClippingConfiguration;
 use helix_view::Editor;
 
 pub use helix_view::input::Event;
@@ -67,6 +92,12 @@ pub trait Component: Any + AnyComponent {
         None
     }
 
+    fn placement(&self) -> LayerPlacement {
+        LayerPlacement::Overlay
+    }
+
+    fn set_area(&mut self, _area: Rect) {}
+
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
@@ -104,6 +135,94 @@ impl Compositor {
 
     pub fn resize(&mut self, area: Rect) {
         self.area = area;
+    }
+
+    fn layer_placements(&self) -> Vec<LayerPlacement> {
+        self.layers.iter().map(|layer| layer.placement()).collect()
+    }
+
+    fn layer_areas(&self, area: Rect, placements: &[LayerPlacement]) -> Vec<Rect> {
+        let mut areas = vec![area; self.layers.len()];
+        let mut docks: Vec<(usize, DockSide, u16, u16, Vec<usize>)> = Vec::new();
+
+        for (index, placement) in placements.iter().enumerate() {
+            if let LayerPlacement::Dock { side, size, order } = placement {
+                if let Some(group) = docks
+                    .iter_mut()
+                    .find(|(_, s, sz, o, _)| *s == *side && *sz == *size && *o == *order)
+                {
+                    group.4.push(index);
+                } else {
+                    docks.push((index, *side, *size, *order, vec![index]));
+                }
+            }
+        }
+
+        docks.sort_by_key(|&(first, _, _, order, _)| (order, first));
+
+        let mut remaining = area;
+        for (_first, side, size, _, indices) in docks {
+            let size = match side {
+                DockSide::Left | DockSide::Right => size.min(remaining.width),
+                DockSide::Top | DockSide::Bottom => size.min(remaining.height),
+            };
+
+            let rect = match side {
+                DockSide::Left => Rect::new(remaining.x, remaining.y, size, remaining.height),
+                DockSide::Right => Rect::new(
+                    remaining.x + remaining.width - size,
+                    remaining.y,
+                    size,
+                    remaining.height,
+                ),
+                DockSide::Top => Rect::new(remaining.x, remaining.y, remaining.width, size),
+                DockSide::Bottom => Rect::new(
+                    remaining.x,
+                    remaining.y + remaining.height - size,
+                    remaining.width,
+                    size,
+                ),
+            };
+
+            for index in indices {
+                areas[index] = rect;
+            }
+
+            if size == 0 {
+                continue;
+            }
+
+            remaining = match side {
+                DockSide::Left => remaining.clip_left(size),
+                DockSide::Right => remaining.clip_right(size),
+                DockSide::Top => remaining.clip_top(size),
+                DockSide::Bottom => remaining.clip_bottom(size),
+            };
+        }
+
+        areas
+    }
+
+    fn dock_clipping(placements: &[LayerPlacement]) -> ClippingConfiguration {
+        let mut clipping = ClippingConfiguration::default();
+
+        for placement in placements {
+            if let LayerPlacement::Dock { side, size, .. } = placement {
+                let current = match side {
+                    DockSide::Left => &mut clipping.left,
+                    DockSide::Right => &mut clipping.right,
+                    DockSide::Top => &mut clipping.top,
+                    DockSide::Bottom => &mut clipping.bottom,
+                };
+
+                *current = Some(match *current {
+                    Some(existing) => existing.max(*size),
+                    None => *size,
+                });
+            }
+        }
+
+        clipping
     }
 
     /// Add a layer to be rendered in front of all existing layers.
@@ -200,16 +319,24 @@ impl Compositor {
     }
 
     pub fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
-        for layer in &mut self.layers {
+        let placements = self.layer_placements();
+        let areas = self.layer_areas(area, &placements);
+        cx.editor.dock_clipping = Self::dock_clipping(&placements);
+
+        for (layer, layer_area) in self.layers.iter_mut().zip(areas) {
+            layer.set_area(layer_area);
             if layer.should_update() {
-                layer.render(area, surface, cx)
+                layer.render(layer_area, surface, cx)
             };
         }
     }
 
     pub fn cursor(&self, area: Rect, editor: &Editor) -> (Option<Position>, CursorKind) {
-        for layer in self.layers.iter().rev() {
-            if let (Some(pos), kind) = layer.cursor(area, editor) {
+        let placements = self.layer_placements();
+        let areas = self.layer_areas(area, &placements);
+
+        for (layer, layer_area) in self.layers.iter().rev().zip(areas.into_iter().rev()) {
+            if let (Some(pos), kind) = layer.cursor(layer_area, editor) {
                 return (Some(pos), kind);
             }
         }

@@ -29,7 +29,7 @@ use crate::{
         },
         Context,
     },
-    compositor::{self, Component},
+    compositor::{self, Component, DockSide, LayerPlacement},
     ui::{self, overlay::overlaid},
 };
 
@@ -285,10 +285,22 @@ pub fn helix_component_module(generate_sources: bool) -> (BuiltInModule, String)
         })
         .register_fn("buffer-area", |buffer: &mut Buffer| buffer.area)
         .register_fn("frame-set-string!", buffer_set_string)
+        .register_fn(
+            "frame-set-grapheme!",
+            |buffer: &mut tui::buffer::Buffer,
+             x: u16,
+             y: u16,
+             grapheme: SteelString,
+             width: usize,
+             style: Style| {
+                buffer.set_grapheme(x, y, grapheme.as_str(), width, style);
+            },
+        )
         .register_fn("SteelEventResult?", |value: SteelVal| {
             SteelEventResult::as_ref(&value).is_ok()
         })
         .register_fn("new-component!", SteelDynamicComponent::new_dyn)
+        .register_fn("dock", dock_value)
         .register_fn("position", Position::new)
         .register_fn("position-row", |position: &Position| position.row)
         .register_fn("position-col", |position: &Position| position.col)
@@ -795,6 +807,76 @@ fn buffer_set_string(
     }
 }
 
+fn dock_value(side: SteelVal, size: usize, order: usize) -> SteelVal {
+    let size = size.min(u16::MAX as usize) as isize;
+    let order = order.min(u16::MAX as usize) as isize;
+
+    vec![
+        SteelVal::SymbolV("dock".into()),
+        side,
+        SteelVal::IntV(size),
+        SteelVal::IntV(order),
+    ]
+    .into_steelval()
+    .unwrap()
+}
+
+fn placement_side(value: &SteelVal) -> Option<DockSide> {
+    match value {
+        SteelVal::SymbolV(s) | SteelVal::StringV(s) => match s.as_str() {
+            "left" => Some(DockSide::Left),
+            "right" => Some(DockSide::Right),
+            "top" => Some(DockSide::Top),
+            "bottom" => Some(DockSide::Bottom),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn placement_number(value: &SteelVal) -> Option<u16> {
+    match value {
+        SteelVal::IntV(n) if *n >= 0 => Some((*n).min(u16::MAX as isize) as u16),
+        SteelVal::NumV(n) if n.is_finite() && *n >= 0.0 => {
+            Some((*n).min(u16::MAX as f64).round() as u16)
+        }
+        _ => None,
+    }
+}
+
+fn parse_placement(value: &SteelVal) -> LayerPlacement {
+    let values: Vec<SteelVal> = match value {
+        SteelVal::ListV(list) => list.iter().cloned().collect(),
+        SteelVal::VectorV(vector) => vector.iter().cloned().collect(),
+        _ => return LayerPlacement::Overlay,
+    };
+
+    if values.len() < 3 {
+        return LayerPlacement::Overlay;
+    }
+
+    let dock = values
+        .get(0)
+        .map(|value| matches!(value, SteelVal::SymbolV(s) | SteelVal::StringV(s) if s.as_str() == "dock"))
+        .unwrap_or(false);
+
+    if !dock {
+        return LayerPlacement::Overlay;
+    }
+
+    let side = match values.get(1).and_then(placement_side) {
+        Some(side) => side,
+        None => return LayerPlacement::Overlay,
+    };
+    let size = match values.get(2).and_then(placement_number) {
+        Some(size) => size,
+        None => return LayerPlacement::Overlay,
+    };
+    let order = values.get(3).and_then(placement_number).unwrap_or(0);
+
+    LayerPlacement::Dock { side, size, order }
+}
+
 /// A dynamic component, used for rendering
 pub struct SteelDynamicComponent {
     name: String,
@@ -806,6 +888,8 @@ pub struct SteelDynamicComponent {
     render: SteelVal,
     cursor: Option<SteelVal>,
     required_size: Option<SteelVal>,
+    placement: Option<SteelVal>,
+    set_area: Option<SteelVal>,
 
     // Cached key event; we keep this around so that when sending
     // events to the event handler, we can reuse the heap allocation
@@ -840,6 +924,8 @@ impl SteelDynamicComponent {
             _should_update: h.get("should_update").cloned(),
             cursor: h.get("cursor").cloned(),
             required_size: h.get("required_size").cloned(),
+            placement: h.get("placement").cloned(),
+            set_area: h.get("set_area").cloned(),
             key_event: None,
             _roots: roots,
             generation: load_generation(),
@@ -1147,6 +1233,52 @@ impl Component for SteelDynamicComponent {
             .flatten()
         } else {
             None
+        }
+    }
+
+    fn placement(&self) -> LayerPlacement {
+        if !is_current_generation(self.generation) {
+            return LayerPlacement::Overlay;
+        }
+
+        let placement = match &self.placement {
+            Some(placement) => placement,
+            None => return LayerPlacement::Overlay,
+        };
+
+        let result = enter_engine(|engine| {
+            engine.call_function_with_args_from_mut_slice(
+                placement.clone(),
+                &mut [self.state.clone()],
+            )
+        });
+
+        match result {
+            Ok(value) => parse_placement(&value),
+            Err(error) => {
+                log::error!("placement hook '{}' failed: {:?}", self.name, error);
+                LayerPlacement::Overlay
+            }
+        }
+    }
+
+    fn set_area(&mut self, area: Rect) {
+        if !is_current_generation(self.generation) {
+            return;
+        }
+
+        let set_area = match &self.set_area {
+            Some(set_area) => set_area,
+            None => return,
+        };
+
+        if let Err(e) = enter_engine(|engine| {
+            engine.call_function_with_args_from_mut_slice(
+                set_area.clone(),
+                &mut [self.state.clone(), area.into_steelval().unwrap()],
+            )
+        }) {
+            log::info!("Error in set_area hook: {:?}", e);
         }
     }
 

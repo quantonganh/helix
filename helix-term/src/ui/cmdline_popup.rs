@@ -1,6 +1,6 @@
 use crate::compositor::{Component, Context, Event, EventResult};
 use crate::ui::prompt::{Completion, Prompt, PromptEvent};
-use crate::ui::{self, gradient_border::GradientBorder};
+use crate::ui::gradient_border::GradientBorder;
 use helix_core::{Position, unicode::width::UnicodeWidthStr};
 use helix_view::{
     graphics::{CursorKind, Rect},
@@ -128,7 +128,11 @@ impl CmdlinePopup {
             let border_style = theme.get("ui.popup.border");
             let background_style = theme.get("ui.popup");
 
-            let border_type = BorderType::new(cx.editor.config().rounded_corners);
+            let border_type = if cx.editor.config().rounded_corners {
+                BorderType::Rounded
+            } else {
+                BorderType::Plain
+            };
             let block = Block::default()
                 .borders(tui::widgets::Borders::ALL)
                 .border_type(border_type)
@@ -148,11 +152,7 @@ impl CmdlinePopup {
         } else {
             ""
         };
-        let prefix_text = if icon.is_empty() {
-            "".to_string()
-        } else {
-            format!("{} ", icon) // Just the icon with space
-        };
+        let prefix_text = "> ".to_string();
 
         if !prefix_text.is_empty() {
             let prompt_color = theme.get("ui.text.focus");
@@ -249,7 +249,11 @@ impl CmdlinePopup {
             }
         } else {
             // Use traditional border
-            let border_type = BorderType::new(cx.editor.config().rounded_corners);
+            let border_type = if cx.editor.config().rounded_corners {
+                BorderType::Rounded
+            } else {
+                BorderType::Plain
+            };
             let block = Block::default()
                 .borders(tui::widgets::Borders::ALL)
                 .border_type(border_type)
@@ -361,9 +365,9 @@ impl Component for CmdlinePopup {
                     ""
                 };
                 let prefix_width = if icon.is_empty() {
-                    0
+                    2 // "> " prefix
                 } else {
-                    icon.width() + 1 // icon + space
+                    icon.width() + 1 + 2 // icon + space + "> "
                 };
 
                 let inner_area = Block::default()
@@ -387,9 +391,9 @@ impl Component for CmdlinePopup {
                 // Add 1 for the truncation indicator "…" if we're scrolled
                 let indicator_offset = if truncate_start { 1 } else { 0 };
                 let cursor_offset = (visible_cursor_offset + indicator_offset) as u16;
-                let clamped_offset = cursor_offset.min(input_area.width.saturating_sub(1));
-                let cursor_x = input_area.x as usize + clamped_offset as usize;
-                let cursor_y = input_area.y as usize;
+                let clamped_offset = cursor_offset.min(inner_area.width.saturating_sub(1));
+                let cursor_x = inner_area.x as usize + prefix_width + clamped_offset as usize;
+                let cursor_y = inner_area.y as usize;
 
                 (
                     Some(Position::new(cursor_y, cursor_x)),

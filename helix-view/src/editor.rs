@@ -447,6 +447,10 @@ pub struct Config {
     /// Picker gradient border configuration
     #[serde(default)]
     pub gradient_borders: GradientBorderConfig,
+    /// Whether to use rounded corners for UI elements. Defaults to `false`.
+    pub rounded_corners: bool,
+    /// Symbol to use for the picker selection indicator. Defaults to `">"`.
+    pub picker_symbol: String,
 }
 
 /// User-facing configuration for `[editor.workspace-trust]`.
@@ -550,7 +554,6 @@ impl PickerStartPosition {
     pub fn is_current(self) -> bool {
         matches!(self, Self::Current)
     }
-}
 }
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Clone, Copy)]
@@ -1387,6 +1390,8 @@ impl Default for Config {
             workspace_trust: WorkspaceTrustConfig::default(),
             cmdline: CmdlineConfig::default(),
             gradient_borders: GradientBorderConfig::default(),
+            rounded_corners: false,
+            picker_symbol: ">".to_string(),
         }
     }
 }
@@ -1491,6 +1496,7 @@ pub struct Editor {
     pub cursor_cache: CursorCache,
 
     pub editor_clipping: ClippingConfiguration,
+    pub dock_clipping: ClippingConfiguration,
 
     pub workspace_trust: WorkspaceTrust,
 }
@@ -1626,6 +1632,7 @@ impl Editor {
             mouse_down_range: None,
             cursor_cache: CursorCache::default(),
             editor_clipping: ClippingConfiguration::default(),
+            dock_clipping: ClippingConfiguration::default(),
             dir_stack: VecDeque::with_capacity(DIR_STACK_CAP),
             workspace_trust,
         }

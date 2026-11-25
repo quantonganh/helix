@@ -284,14 +284,14 @@ impl Decoration for InlineDiagnostics<'_> {
         self.state.compute_line_diagnostics();
         let mut renderer = Renderer {
             renderer,
-            first_row: pos.visual_line + virt_off.row as u16,
-            row: pos.visual_line + virt_off.row as u16,
+            first_row: pos.visual_line.saturating_add(virt_off.row as u16),
+            row: pos.visual_line.saturating_add(virt_off.row as u16),
             config: &self.state.config,
             styles: &self.styles,
         };
         renderer.draw_multi_diagnostics(&mut self.state.stack);
         renderer.draw_diagnostics(&mut self.state.stack);
-        let horizontal_off = renderer.row - renderer.first_row;
+        let horizontal_off = renderer.row.saturating_sub(renderer.first_row);
         Position::new(horizontal_off as usize, col_off as usize)
     }
 

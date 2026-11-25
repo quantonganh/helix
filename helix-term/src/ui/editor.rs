@@ -1716,6 +1716,19 @@ impl Component for EditorView {
 
         let mut area = area;
 
+        if let Some(top) = cx.editor.dock_clipping.top {
+            area = area.clip_top(top);
+        }
+        if let Some(bottom) = cx.editor.dock_clipping.bottom {
+            area = area.clip_bottom(bottom);
+        }
+        if let Some(left) = cx.editor.dock_clipping.left {
+            area = area.clip_left(left);
+        }
+        if let Some(right) = cx.editor.dock_clipping.right {
+            area = area.clip_right(right);
+        }
+
         // TODO: This may need to get looked at!
         if let Some(top) = cx.editor.editor_clipping.top {
             area = area.clip_top(top);
